@@ -1,0 +1,661 @@
+---
+title: "Microbiome/IBR R&R"
+author: "Sarah Vogel"
+date: "2025-01-27"
+output: html_document
+---
+
+#setup
+
+##set working directory
+###bu desktop
+```{r}
+setwd("~/Data/Analyses/R&R")
+```
+
+##load libraries
+```{r}
+suppressPackageStartupMessages({
+  library(vegan)
+  library(tidyverse)
+  library(stats)
+  library(phyloseq)
+  library(mefa)
+  library(qiime2R)
+  library(microbiome)
+  library(fantaxtic)
+  library(car)
+  library(ggpubr)
+  library(readxl)
+  library(psych)
+  library(sjPlot)
+  library(reshape2)
+  library(mosaic)
+  library(Maaslin2)
+  library(lm.beta)
+  library(lavaan)
+  library(lcsm)
+  library(dplyr)
+  library(tidyr)
+  library(readr)
+  library(DirichletMultinomial)
+  library(reshape2)
+  library(magrittr)
+  library(tibble)
+  library(pwr)
+})
+```
+##load in data files
+```{r}
+df <- read.csv("metadata_fullsample.csv")
+df$X <- NULL
+
+#include participants who have complete data on IBR and have at least one gut microbiome measure
+df2 <- df[!is.na(df$ibr11_T30)& !is.na(df$ibr4_T30) & !is.na(df$ibr5_T30),] #subset to those with complete IBR data
+
+#further subset to those with complete IBR data and at least one time point of gut microbiome 
+df2 <- df2[!is.na(df2$shannon_2)| !is.na(df2$shannon_18),]
+
+```
+
+###calculate specific sample sizes
+```{r}
+gut2temp <- df2[!is.na(df2$shannon_2),]
+gut18temp <- df2[!is.na(df2$shannon_18),]
+```
+
+#Creating affect composite
+
+```{r}
+#measurement model
+measurement <- '
+temp =~ ibr11_T30 + ibr4_T30 + ibr5_T30 
+'
+fitm <- cfa(measurement,fixed.x=F,data = df2)
+summary(fitm, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+```
+
+##extract LV affect for use in MaAslin models
+```{r}
+affect <- lavPredict(fitm)
+
+df2 <- cbind(df2, affect)
+
+write.csv(df2, "metadata_all_LV.csv")
+write_tsv(df2, "metadata_all_LV.tsv")
+```
+
+#descriptives
+```{r}
+aov1 <- aov(df2$temp ~ df2$tc_race_cat)
+summary(aov1)
+
+
+```
+
+
+#Alpha diversity analyses
+##shannon, 2 weeks
+```{r}
+solutions2s <- '
+temp ~ shannon_2 + tc_sex + tc_race_cat + SES + PH_cesarean_T2 + fp_bf_still_T2
+'
+fits2s <- sem(solutions2s, fixed.x=F,data = df2)
+summary(fits2s, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedsolution(fits2s)
+```
+
+##shannon, 18 months
+```{r}
+solutions18s <- '
+temp ~ shannon_18 + tc_sex + tc_race_cat+ SES + PH_cesarean_T2  + months_bf_T18
+'
+fits18s <- cfa(solutions18s, fixed.x=F,data = df2)
+summary(fits18s, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE,)
+standardizedSolution(fits18s)
+```
+
+##chao1, 2 weeks
+```{r}
+solutionc2s <- '
+temp ~ chao1_2 + tc_sex+ tc_race_cat + SES + PH_cesarean_T2 + fp_bf_still_T2
+'
+fitc2s <- cfa(solutionc2s, fixed.x=F,data = df2)
+summary(fitc2s, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedsolution(fitc2s)
+```
+
+##chao1, 18 months
+```{r}
+solutionc18s <- '
+temp ~ chao1_18 + tc_sex + tc_race_cat+ SES + PH_cesarean_T2  + months_bf_T18  
+'
+fitc18s <- cfa(solutionc18s, fixed.x=F,data = df2)
+summary(fitc18s, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedSolution(fitc18s)
+```
+
+##shannon, both time points
+```{r}
+solutions_both <- '
+temp ~ shannon_2 + shannon_18 + tc_sex + tc_race_cat+ SES + PH_cesarean_T2  + months_bf_T18
+'
+fits_both <- cfa(solutions_both, fixed.x=F,data = df2)
+summary(fits_both, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE,)
+standardizedSolution(fits_both)
+```
+
+##chao1, both time points
+```{r}
+solutionc_both <- '
+temp ~ chao1_2 + chao1_18 + tc_sex + tc_race_cat+ SES + PH_cesarean_T2  + months_bf_T18  
+'
+fitc_both <- cfa(solutionc_both, fixed.x=F,data = df2)
+summary(fitc_both, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedSolution(fitc_both)
+```
+
+#Differential abundance analyses
+##2 weeks
+
+###species
+```{r}
+LV30_spec_2wk <- Maaslin2(
+  input_data = "2week_abundances.tsv",
+  input_metadata = "metadata_all_LV.tsv",
+  output = "~/Data/Analyses/R&R/DA/2wk/species",
+  min_abundance = 0,
+  min_prevalence = 0.5, 
+  max_significance = 0.25, 
+  analysis_method = "lm", #default
+  fixed_effects = c("temp"),
+  standardize = TRUE
+)
+```
+###genus
+```{r}
+LV30_genus_2week <- Maaslin2(
+  input_data = "2week_genusabundances_DA.tsv",
+  input_metadata = "metadata_all_LV.tsv",
+  output = "~/Data/Analyses/R&R/DA/2wk/genus",
+  min_abundance = 0,
+  min_prevalence = 0.5,
+  max_significance = 0.25, 
+  analysis_method = "lm", #default
+  fixed_effects = c("temp"),
+  standardize = TRUE
+)
+```
+
+##18 months
+###species
+```{r}
+LV30_spec_18mo <- Maaslin2(
+  input_data = "18mo_DAready.tsv",
+  input_metadata = "metadata_all_LV.tsv",
+  output = "~/Data/Analyses/R&R/DA/18mo/species",
+  min_abundance = 0,
+  min_prevalence = 0.5, 
+  max_significance = 0.25, 
+  analysis_method = "lm", #default
+  fixed_effects = c("temp"),
+  standardize = TRUE
+)
+```
+
+###genus
+```{r}
+LV30_genus_18mo <- Maaslin2(
+  input_data = "18mo_genusabundances_DA.tsv",
+  input_metadata = "metadata_all_LV.tsv",
+  output = "~/Data/Analyses/R&R/DA/18mo/genus",
+  min_abundance = 0,
+  min_prevalence = 0.5, 
+  max_significance = 0.25, 
+  analysis_method = "lm", #default
+  fixed_effects = c("temp"),
+  standardize = TRUE
+)
+```
+
+#Taxa linear models with controls
+##format data for linear models
+###2 week
+```{r}
+#genus, want to grab genera associated at 2 weeks and 18 months for use as controls
+genus_features2wk <- read_tsv("2week_genusabundances_DA.tsv")
+#subset to only taxa of interest, those identified as significant in MaAslin models
+
+genus2wk_sub <- genus_features2wk[, c("SeqID", "k__Bacteria.p__Firmicutes.c__Negativicutes.o__Veillonellales.f__Veillonellaceae.g__Veillonella", "k__Bacteria.p__Firmicutes.c__Clostridia.o__Eubacteriales.f__Clostridiaceae.g__Clostridium", "k__Bacteria.p__Firmicutes.c__Bacilli.o__Lactobacillales.f__Streptococcaceae.g__Streptococcus", "k__Bacteria.p__Firmicutes.c__Bacilli.o__Lactobacillales.f__Lactobacillaceae.g__Lactobacillus", "k__Bacteria.p__Actinobacteria.c__Actinomycetia.o__Bifidobacteriales.f__Bifidobacteriaceae.g__Bifidobacterium", "k__Bacteria.p__Bacteroidetes.c__Bacteroidia.o__Bacteroidales.f__Bacteroidaceae.g__Bacteroides")]
+
+#rename columns to genus name and with _2 to distinguish from 18 month
+colnames(genus2wk_sub) <- c("SeqID", "veillonella_2", "clostridium_2", "streptococcus_2", "lactobacillus_2", "bifidobacterium_2", "bacteroides_2")
+
+df_gens <- merge(df2, genus2wk_sub, by = "SeqID", all = TRUE)
+
+```
+
+###18 month
+```{r}
+#18 month
+genus_18mo <- read_tsv("18mo_genusabundances_DA.tsv")
+#subset to only taxa of interest, those identified in the 2 week MaAslin models
+genus_18mo_sub <- genus_18mo[, c("SeqID",
+                                 "k__Bacteria.p__Firmicutes.c__Clostridia.o__Clostridiales.f__Ruminococcaceae.g__Ruthenibacterium", 
+                                 "k__Bacteria.p__Firmicutes.c__Clostridia.o__Clostridiales.f__Ruminococcaceae.g__Anaerotruncus",
+                                 "k__Bacteria.p__Firmicutes.c__Bacilli.o__Lactobacillales.f__Lactobacillaceae.g__Lactobacillus",
+                                 "k__Bacteria.p__Actinobacteria.c__Actinobacteria.o__Bifidobacteriales.f__Bifidobacteriaceae.g__Bifidobacterium",
+                                 "k__Bacteria.p__Bacteroidetes.c__Bacteroidia.o__Bacteroidales.f__Bacteroidaceae.g__Bacteroides")]
+
+colnames(genus_18mo_sub) <- c("SeqID", "ruthenibacterium_18", "anaerotruncus_18", "lactobacillus_18", "bifidobacterium_18", "bacteroides_18")
+
+df_gens <- merge(df_gens, genus_18mo_sub, by = "SeqID", all = TRUE)
+
+#do some log transformations of the abundance variables
+
+df_gens$streptococcus_2_log <- log(df_gens$streptococcus_2 + 0.0001)
+describe(df_gens$streptococcus_2_log)#no longer skewed
+
+df_gens$veillonella_2_log <- log(df_gens$veillonella_2 + 0.0001)
+describe(df_gens$veillonella_2_log)#no longer skewed
+
+df_gens$clostridium_2_log <- log(df_gens$clostridium_2 + 0.0001)
+describe(df_gens$clostridium_2_log)#no longer skewed
+
+#bifidobacterium 2 and 18 not skewed
+
+df_gens$lactobacillus_2_log <- log(df_gens$lactobacillus_2 + + 0.0001)
+df_gens$bacteroides_2_log <- log(df_gens$bacteroides_2 + + 0.0001)
+df_gens$lactobacillus_18_log <- log(df_gens$lactobacillus_18 + + 0.0001)
+
+#bacteroides 18 not skewed
+
+df_gens$anaerotruncus_18_log <- log(df_gens$anaerotruncus_18 + + 0.0001)
+df_gens$ruthenibacterium_18_log <- log(df_gens$ruthenibacterium_18 + + 0.0001)
+
+```
+###subset to correct sample
+```{r}
+df_gens <- df_gens[!is.na(df_gens$temp) & (!is.na(df_gens$shannon_2) | !is.na(df_gens$shannon_18)),]
+```
+
+###correlations
+```{r}
+cor.test(df_gens$bifidobacterium_2, df_gens$temp)
+cor.test(df_gens$bifidobacterium_18, df_gens$temp)
+
+cor.test(df_gens$lactobacillus_2_log, df_gens$temp)
+cor.test(df_gens$lactobacillus_18_log, df_gens$temp)
+
+cor.test(df_gens$bacteroides_2_log, df_gens$temp)
+cor.test(df_gens$bacteroides_18, df_gens$temp)
+
+
+```
+##Run models
+
+###bifidobacterium, 2 weeks
+```{r}
+bifido <- '
+temp ~ bifidobacterium_2 + tc_sex+ tc_race_cat + SES + PH_cesarean_T2 + fp_bf_still_T2
+'
+fitb <- sem(bifido, fixed.x = F,data = df_gens)
+summary(fitb, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedSolution(fitb)
+```
+
+###bifidobacterium, 18 months
+```{r}
+bifido18 <- '
+temp ~ bifidobacterium_18  + tc_sex+ tc_race_cat +  SES + PH_cesarean_T2 + months_bf_T18 
+'
+fitb18 <- sem(bifido18, fixed.x = F, data = df_gens)
+summary(fitb18, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedSolution(fitb18)
+```
+
+###lactobacillus, 2 weeks
+```{r}
+lacto <- '
+temp ~ lactobacillus_2_log + tc_sex + tc_race_cat+ SES + PH_cesarean_T2 + fp_bf_still_T2 
+'
+fitl <- sem(lacto, fixed.x = F, data = df_gens)
+summary(fitl, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedSolution(fitl)
+```
+
+###lactobacillus, 18 months
+```{r}
+lacto18 <- '
+temp ~ lactobacillus_18_log + tc_sex + tc_race_cat+  SES + PH_cesarean_T2 + months_bf_T18 
+'
+fitl18 <- sem(lacto18, fixed.x = F, data = df_gens)
+summary(fitl18, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedSolution(fitl18)
+```
+
+
+###bacteroides, 2 weeks
+```{r}
+bacter <- '
+temp ~ bacteroides_2_log + tc_sex+ tc_race_cat + SES + PH_cesarean_T2 + fp_bf_still_T2 
+'
+fitbac <- sem(bacter, fixed.x = F,data = df_gens)
+summary(fitbac, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedSolution(fitbac)
+```
+
+###bacteroides, 18 months
+```{r}
+bacter18 <- '
+temp ~ bacteroides_18 + tc_sex+ tc_race_cat +SES + PH_cesarean_T2 + months_bf_T18
+'
+fitbac18 <- sem(bacter18, fixed.x = F,data = df_gens)
+summary(fitbac18, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedSolution(fitbac18)
+```
+
+###veillonella
+```{r}
+modelv <- '
+temp ~ veillonella_2_log + tc_sex+ tc_race_cat + SES + PH_cesarean_T2 + fp_bf_still_T2 
+'
+fitv <- sem(modelv, fixed.x=F,data = df_gens)
+summary(fitv, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedSolution(fitv)
+```
+
+###streptococcus
+```{r}
+models <- '
+temp ~ streptococcus_2_log + tc_sex + tc_race_cat+ SES + PH_cesarean_T2 + fp_bf_still_T2 
+'
+fits <- sem(models, fixed.x=F,data = df_gens)
+summary(fits, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+standardizedSolution(fits)
+```
+
+###clostridium
+```{r}
+modelc <- '
+temp ~ clostridium_2_log+ tc_sex + tc_race_cat+ SES + PH_cesarean_T2 + fp_bf_still_T2 
+'
+fitc <- sem(modelc, fixed.x=F,data = df_gens)
+summary(fitc, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)#ns
+standardizedSolution(fitc)
+```
+
+###anaerotruncus
+```{r}
+modelan <- '
+temp ~  anaerotruncus_18_log + tc_sex + tc_race_cat+  SES + PH_cesarean_T2 + months_bf_T18  
+'
+fitan <- sem(modelan, fixed.x=F,data = df_gens)
+summary(fitan, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)#ns
+standardizedSolution(fitan)
+```
+
+###ruthenibacterium
+```{r}
+modelr <- '
+temp ~  ruthenibacterium_18_log + tc_sex + tc_race_cat+  SES + PH_cesarean_T2 + months_bf_T18 
+'
+fitr <- sem(modelr, fixed.x=F,data = df_gens)
+summary(fitr, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)#ns
+standardizedSolution(fitr)
+```
+
+#Beta diversity analyses
+
+##classical multidimensional scaling
+
+###2 weeks
+```{r}
+sample_names <- colnames(genus_features2wk)
+
+dist_matrix <- vegdist(genus_features2wk, method = "bray")
+
+# Perform PCoA
+pcoa_result <- cmdscale(dist_matrix)
+
+colnames(pcoa_result) <- c("PCoA1", "PCoA2")
+
+genus_beta <- cbind(genus_features2wk, pcoa_result)
+
+beta_id <- genus_beta[,c("SeqID", "PCoA1", "PCoA2")]
+
+df_gens <- merge(df_gens, beta_id, by = "SeqID")
+
+cor.test(df_gens$temp, df_gens$PCoA1) #no correlation
+cor.test(df_gens$temp, df_gens$PCoA2) #no correlation
+
+```
+####regression
+```{r}
+beta2 <- '
+temp ~  PCoA1 + PCoA2 + tc_sex+ tc_race_cat +  SES + fp_bf_still_T2 + PH_cesarean_T2
+'
+fitbeta2 <- sem(beta2, fixed.x=F,data = df_gens)
+summary(fitbeta2, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)#ns
+standardizedSolution(fitbeta2)
+```
+###18 months
+```{r}
+sample_names <- colnames(genus_18mo)
+
+# Calculate dissimilarity matrix (replace this with your own distance calculation method)
+# Here, we use Bray-Curtis dissimilarity as an example
+dist_matrix <- vegdist(genus_18mo, method = "bray")
+
+# Perform PCoA
+pcoa_result <- cmdscale(dist_matrix)
+
+colnames(pcoa_result) <- c("PCoA118", "PCoA218")
+
+genus_beta <- cbind(genus_18mo, pcoa_result)
+
+beta_id <- genus_beta[,c("SeqID", "PCoA118", "PCoA218")]
+
+df_gens <- merge(df_gens, beta_id, by = "SeqID")
+
+cor.test(df_gens$temp, df_gens$PCoA118) #no correlation
+cor.test(df_gens$temp, df_gens$PCoA218) #no correlation
+
+```
+
+####regression
+```{r}
+beta18 <- '
+temp ~  PCoA118 + PCoA218 + tc_sex+ tc_race_cat +  SES + months_bf_T18 + PH_cesarean_T2
+'
+fitbeta18 <- sem(beta18, fixed.x=F,data = df_gens)
+summary(fitbeta18, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)#ns
+standardizedSolution(fitbeta18)
+```
+#FDR corrections
+
+```{r}
+models <- list(fits2s, fitc2s, fits18s, fitc18s, fits_both, fitc_both,fitb, fitb18, fitl, fitl18, fitbac, fitbac18, fitv, fits, fitc, fitan, fitr, fitbeta2, fitbeta18)
+model_names <- c("shannon2", "chao2", "shannon18", "chao18", "fits_both","fitc_both","bifido2", "bifido18", "lacto2", "lacto18", "bacter2", "bacter18", "veillonella", "strepto", "clostridium", "anaero", "rutheni", "beta2", "beta18")  # Assign names for reference
+
+```
+
+```{r}
+p_values <- unlist(lapply(seq_along(models), function(i) {
+  param_estimates <- parameterEstimates(models[[i]])
+  subset_params <- param_estimates[param_estimates$op == "~", ] 
+  pvals <- subset_params$pvalue 
+  
+  # Ensure names have the same length as pvals
+  names(pvals) <- paste(model_names[i], subset_params$lhs, subset_params$rhs, sep = "_")  
+  
+  return(pvals)
+}))
+
+# Apply FDR correction
+q_values <- p.adjust(p_values, method = "BH")
+
+# Reconstruct the results dataframe with correctly indexed q-values
+results <- do.call(rbind, lapply(seq_along(models), function(i) {
+  param_estimates <- parameterEstimates(models[[i]])
+  subset_params <- param_estimates[param_estimates$op == "~", ]
+  
+  # Construct unique identifiers to match q-values correctly
+  row_ids <- paste(model_names[i], subset_params$lhs, subset_params$rhs, sep = "_")
+  
+  data.frame(
+    model = model_names[i],
+    term = subset_params$rhs,  
+    outcome = subset_params$lhs,  
+    p_value = subset_params$pvalue,  
+    q_value = q_values[row_ids]  # Correctly matched q-values
+  )
+}))
+
+# View corrected results
+print(results)
+write.csv(results, "corrected_qvals.csv")
+```
+
+#Plots
+##shannon index
+###2 weeks
+```{r}
+ggplot(df_gens %>% filter(!is.na(temp)), aes(y = temp, x = shannon_2)) +
+geom_point(alpha=1, position = position_jitter(height = .002, width = .1), na.rm = TRUE, color='#5533FF') + geom_smooth(method="lm", color='#FF5733') +
+  xlab("Shannon Diversity - 2 weeks") + ylab("Negative Affect - 30 months") +
+  scale_color_brewer(palette = "Dark2") + #specify colorblind friendly color palette for color
+  theme_minimal() +
+  #theme( 
+  #  panel.grid.major.x = element_blank(),
+  #  panel.grid.minor.x = element_blank(),
+  #  panel.grid.major.y = element_blank(),
+  #  panel.grid.minor.y = element_blank(),
+  #) +
+  theme(legend.position = "none")
+
+ggsave("figures/shannon2_temp.jpg", height=4, width=6, dpi=1000)
+
+
+```
+###18 months
+```{r}
+ggplot(df_gens %>% filter(!is.na(temp)), aes(y = temp, x = shannon_18)) +
+geom_point(alpha=1, position = position_jitter(height = .002, width = .1), na.rm = TRUE, color='#5533FF') + geom_smooth(method="lm", color='#FF5733') +
+  xlab("Shannon Diversity - 18 months") + ylab("Negative Affect - 30 months") +
+  scale_color_brewer(palette = "Dark2") + #specify colorblind friendly color palette for color
+  theme_minimal() +
+  #theme( 
+  #  panel.grid.major.x = element_blank(),
+  #  panel.grid.minor.x = element_blank(),
+  #  panel.grid.major.y = element_blank(),
+  #  panel.grid.minor.y = element_blank(),
+  #) +
+  theme(legend.position = "none")
+
+ggsave("figures/shannon18_temp.jpg", height=4, width=6, dpi=1000)
+
+
+```
+
+##chao1 index
+```{r}
+ggplot(df_gens %>% filter(!is.na(temp)), aes(y = temp, x = chao1_2)) +
+geom_point(alpha=1, position = position_jitter(height = .002, width = .1), na.rm = TRUE, color='#5533FF') + geom_smooth(method="lm", color='#FF5733') +
+  xlab("Chao1 Diversity - 2 weeks") + ylab("Negative Affect - 30 months") +
+  scale_color_brewer(palette = "Dark2") + #specify colorblind friendly color palette for color
+  theme_minimal() +
+  #theme( 
+  #  panel.grid.major.x = element_blank(),
+  #  panel.grid.minor.x = element_blank(),
+  #  panel.grid.major.y = element_blank(),
+  #  panel.grid.minor.y = element_blank(),
+  #) +
+  theme(legend.position = "none")
+
+ggsave("figures/chao2_temp.jpg", height=4, width=6, dpi=1000)
+
+
+```
+
+
+
+##veillonella 2 weeks
+```{r}
+ggplot(df_gens %>% filter(!is.na(temp)), aes(y = temp, x = veillonella_2_log)) +
+geom_point(alpha=1, position = position_jitter(height = .002, width = .1), na.rm = TRUE, color='#7570B3') + geom_smooth(method="lm", color='#E7298A') +
+  xlab("Veillonella Relative Abundance (log transformed) - 2 weeks") + ylab("Negative Affect - 30 months") +
+  scale_color_brewer(palette = "Dark2") + #specify colorblind friendly color palette for color
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggsave("figures/veillonella2_temp_log.jpg", height=4, width=6, dpi=1000)
+```
+
+##veillonella 18 months
+```{r}
+ggplot(df_gens %>% filter(!is.na(temp)), aes(y = temp, x = veillonella_18_log)) +
+geom_point(alpha=1, position = position_jitter(height = .002, width = .1), na.rm = TRUE, color='#7570B3') + geom_smooth(method="lm", color='#E7298A') +
+  xlab("Veillonella Relative Abundance (log transformed) - 18 months") + ylab("Negative Affect - 30 months") +
+  scale_color_brewer(palette = "Dark2") + #specify colorblind friendly color palette for color
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggsave("figures/veillonella18_temp_log.jpg", height=4, width=6, dpi=1000)
+```
+
+##bifidobacterium 2 weeks
+```{r}
+ggplot(df_gens %>% filter(!is.na(temp)), aes(y = temp, x = bifidobacterium_2)) +
+geom_point(alpha=1, position = position_jitter(height = .002, width = .1), na.rm = TRUE, color='#7570B3') + geom_smooth(method="lm", color='#E7298A') +
+  xlab("Bifidobacterium Relative Abundance - 2 weeks") + ylab("Negative Affect - 30 months") +
+  scale_color_brewer(palette = "Dark2") + #specify colorblind friendly color palette for color
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggsave("figures/bifido2_temp.jpg", height=4, width=6, dpi=1000)
+
+```
+
+##anaerotruncus 18 months
+```{r}
+ggplot(df_gens %>% filter(!is.na(temp)), aes(y = temp, x = anaerotruncus_18_log)) +
+geom_point(alpha=1, position = position_jitter(height = .002, width = .1), na.rm = TRUE, color='#E1BE6A') + geom_smooth(method="lm", color='#40B0A6') +
+  xlab("Anaerotruncus Relative Abundance (log transformed) - 18 months") + ylab("Negative Affect - 30 months") +
+  scale_color_brewer(palette = "Dark2") + #specify colorblind friendly color palette for color
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggsave("figures/anaero18_temp.jpg", height=4, width=6, dpi=1000)
+
+```
+
+##ruthenibacterium 2 weeks
+```{r}
+ggplot(df_gens %>% filter(!is.na(temp)), aes(y = temp, x = ruthenibacterium_2_log)) +
+geom_point(alpha=1, position = position_jitter(height = .002, width = .1), na.rm = TRUE, color='#FFC20A') + geom_smooth(method="lm", color='#0C7BDC') +
+  xlab("Ruthenibacterium Relative Abundance (log transformed) - 2 weeks") + ylab("Negative Affect - 30 months") +
+  scale_color_brewer(palette = "Dark2") + #specify colorblind friendly color palette for color
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggsave("figures/rutheni_2_temp.jpg", height=4, width=6, dpi=1000)
+
+```
+
+
+##ruthenibacterium 18 months
+```{r}
+ggplot(df_gens %>% filter(!is.na(temp)), aes(y = temp, x = ruthenibacterium_18_log)) +
+geom_point(alpha=1, position = position_jitter(height = .002, width = .1), na.rm = TRUE, color='#FFC20A') + geom_smooth(method="lm", color='#0C7BDC') +
+  xlab("Ruthenibacterium Relative Abundance (log transformed) - 18 months") + ylab("Negative Affect - 30 months") +
+  scale_color_brewer(palette = "Dark2") + #specify colorblind friendly color palette for color
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggsave("figures/rutheni_18_temp.jpg", height=4, width=6, dpi=1000)
+
+```
+
+
+
