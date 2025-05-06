@@ -7,11 +7,6 @@ output: html_document
 
 #setup
 
-##set working directory
-###bu desktop
-```{r}
-setwd("~/Data/Analyses/R&R")
-```
 
 ##load libraries
 ```{r}
@@ -47,7 +42,7 @@ suppressPackageStartupMessages({
 ```
 ##load in data files
 ```{r}
-df <- read.csv("metadata_fullsample.csv")
+df <- read.csv("metadata_fullsample_sharing.csv")
 df$X <- NULL
 
 #include participants who have complete data on IBR and have at least one gut microbiome measure
@@ -83,14 +78,6 @@ df2 <- cbind(df2, affect)
 
 write.csv(df2, "metadata_all_LV.csv")
 write_tsv(df2, "metadata_all_LV.tsv")
-```
-
-#descriptives
-```{r}
-aov1 <- aov(df2$temp ~ df2$tc_race_cat)
-summary(aov1)
-
-
 ```
 
 
@@ -163,7 +150,7 @@ standardizedSolution(fitc_both)
 LV30_spec_2wk <- Maaslin2(
   input_data = "2week_abundances.tsv",
   input_metadata = "metadata_all_LV.tsv",
-  output = "~/Data/Analyses/R&R/DA/2wk/species",
+  output = "~/DA/2wk/species", #replace with your file path
   min_abundance = 0,
   min_prevalence = 0.5, 
   max_significance = 0.25, 
@@ -177,7 +164,7 @@ LV30_spec_2wk <- Maaslin2(
 LV30_genus_2week <- Maaslin2(
   input_data = "2week_genusabundances_DA.tsv",
   input_metadata = "metadata_all_LV.tsv",
-  output = "~/Data/Analyses/R&R/DA/2wk/genus",
+  output = "~/DA/2wk/genus",
   min_abundance = 0,
   min_prevalence = 0.5,
   max_significance = 0.25, 
@@ -193,7 +180,7 @@ LV30_genus_2week <- Maaslin2(
 LV30_spec_18mo <- Maaslin2(
   input_data = "18mo_DAready.tsv",
   input_metadata = "metadata_all_LV.tsv",
-  output = "~/Data/Analyses/R&R/DA/18mo/species",
+  output = "~/DA/18mo/species",
   min_abundance = 0,
   min_prevalence = 0.5, 
   max_significance = 0.25, 
@@ -208,7 +195,7 @@ LV30_spec_18mo <- Maaslin2(
 LV30_genus_18mo <- Maaslin2(
   input_data = "18mo_genusabundances_DA.tsv",
   input_metadata = "metadata_all_LV.tsv",
-  output = "~/Data/Analyses/R&R/DA/18mo/genus",
+  output = "~/DA/18mo/genus",
   min_abundance = 0,
   min_prevalence = 0.5, 
   max_significance = 0.25, 
