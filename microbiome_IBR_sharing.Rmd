@@ -1,16 +1,11 @@
 ---
 title: "Microbiome_IBR_sharing"
 author: "Sarah Vogel"
-date: "2024-10-12"
+date: "2025-5-5"
 output: html_document
 ---
 
 #setup
-
-##set working directory
-```{r}
-setwd("~/Dropbox/BASELab/DMMProject/Data/Analyses")
-```
 
 ##load libraries
 ```{r}
@@ -98,9 +93,9 @@ summary(fitc, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates 
 ###species
 ```{r}
 LV30_spec_2wk <- Maaslin2(
-  input_data = "2week_abundances.tsv",
+  input_data = "2week_species_abundances.tsv",
   input_metadata = "metadata_all_LV.tsv",
-  output = "~/Dropbox/BASELab/DMMProject/Data/Analyses/DA/2weeks/species",
+  output = "~/DA/2weeks/species",
   min_abundance = 0,
   min_prevalence = 0.5, 
   max_significance = 0.25, 
@@ -123,25 +118,12 @@ LV30_genus_2week <- Maaslin2(
   standardize = TRUE
 )
 ```
-###paths
-```{r}
-LV30_paths_2week <- Maaslin2(
-  input_data = "2weekpath_DA.tsv",
-  input_metadata = "metadata_all_LV.tsv",
-  output = "~/Dropbox/BASELab/DMMProject/Data/Analyses/DA/2weeks/Path",
-  min_abundance = 0,
-  min_prevalence = 0.5,
-  max_significance = 0.25, 
-  analysis_method = "lm", #default
-  fixed_effects = c("temp"),
-  standardize = TRUE
-)
-```
+
 ##18 months
 ###species
 ```{r}
 LV30_spec_18mo <- Maaslin2(
-  input_data = "18mo_DAready.tsv",
+  input_data = "18mo_DAready_species.tsv",
   input_metadata = "metadata_all_LV.tsv",
   output = "~/Dropbox/BASELab/DMMProject/Data/Analyses/DA/18mo/species",
   min_abundance = 0,
@@ -167,20 +149,7 @@ LV30_genus_18mo <- Maaslin2(
   standardize = TRUE
 )
 ```
-###Path
-```{r}
-LV30_path_18mo <- Maaslin2(
-  input_data = "18mopath_DA.tsv",
-  input_metadata = "metadata_all_LV.tsv",
-  output = "~/Dropbox/BASELab/DMMProject/Data/Analyses/DA/18mo/Paths",
-  min_abundance = 0,
-  min_prevalence = 0.5, 
-  max_significance = 0.25, 
-  analysis_method = "lm", #default
-  fixed_effects = c("temp"),
-  standardize = TRUE
-)
-```
+
 #Taxa linear models with controls
 ##format data for linear models
 ###2 week
@@ -335,7 +304,7 @@ summary(fitr, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates 
 ```
 
 
-
+#beta diversity analyses
 ##classical multidimensional scaling
 
 ###2 weeks
@@ -357,6 +326,18 @@ df_gens <- merge(df_gens, beta_id, by = "SeqID")
 
 cor.test(df_gens$temp, df_gens$PCoA1) #no correlation
 cor.test(df_gens$temp, df_gens$PCoA2) #no correlation
+
+```
+
+###linear model
+```{r}
+beta_2wk <- '
+
+temp ~ PCoA1 + PCoA2 + tc_sex + SES + months_bf_T18 + PH_cesarean_T2
+
+'
+fitbeta2 <- sem(beta_2wk, fixed.x=F,data = df_gens)
+summary(fitbeta2, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
 
 ```
 
@@ -383,6 +364,31 @@ cor.test(df_gens$temp, df_gens$PCoA118) #no correlation
 cor.test(df_gens$temp, df_gens$PCoA218) #no correlation
 
 ```
+
+####linear model
+```{r}
+beta_18mo <- '
+
+temp ~ PCoA118 + PCoA218 + tc_sex + SES + months_bf_T18 + PH_cesarean_T2
+
+'
+fitbeta18 <- sem(beta_18mo, fixed.x=F,data = df_gens)
+summary(fitbeta18, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+
+```
+
+###linear model both
+```{r}
+beta_both <- '
+
+temp ~ PCoA1 + PCoA2 + PCoA118 + PCoA218 + tc_sex + SES + months_bf_T18 + PH_cesarean_T2
+
+'
+fitbetaboth <- sem(beta_both, fixed.x=F,data = df_gens)
+summary(fitbetaboth, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
+
+```
+
 #Plots
 ##shannon index
 ###2 weeks
@@ -523,121 +529,3 @@ ggsave("figures/rutheni_18_temp.jpg", height=4, width=6, dpi=1000)
 
 ```
 
-#Beta diversity analyses
-##permanova
-```{r}
-#need to subset genus features to only include those with 2 week gut microbiome and all IBR measures
-ids_to_keep <- df2$SeqID
-
-# Now, subset 'genus_features2wk' based on the IDs present in 'ids_to_keep'
-subset_genus_features <- genus_features2wk[genus_features2wk$SeqID %in% ids_to_keep, ]
-
-# Extract IDs from subset_genus_features
-subset_ids <- subset_genus_features$SeqID
-
-# Extract IDs from df3
-df2_ids <- df2$SeqID
-
-# Find the intersection of IDs
-common_ids <- intersect(subset_ids, df2_ids)
-
-# Subset both data frames based on the common IDs
-subset_genus_features <- subset_genus_features[subset_genus_features$SeqID %in% common_ids, ]
-df3 <- df2[df2$SeqID %in% common_ids, ]
-
-
-bray2 <- vegdist(subset_genus_features, method = "bray", type = "samples", na.rm = T)
-
-# test betadispersion assumption
-disp <- betadisper(bray2, df3$temp) 
-permutest(disp, permutations=how(nperm=9999)) #homogeneity of betadispersion is violated, 
-
-set.seed(5049)  
-adonis2(bray2~temp, data=df3, permutations=9999)#ns
-
-```
-
-##classical multidimensional scaling
-
-###2 weeks
-```{r}
-sample_names <- colnames(genus_features2wk)
-
-# Calculate dissimilarity matrix (replace this with your own distance calculation method)
-# Here, we use Bray-Curtis dissimilarity as an example
-dist_matrix <- vegdist(genus_features2wk, method = "bray")
-
-# Perform PCoA
-pcoa_result <- cmdscale(dist_matrix)
-
-colnames(pcoa_result) <- c("PCoA1", "PCoA2")
-
-genus_beta <- cbind(genus_features2wk, pcoa_result)
-
-beta_id <- genus_beta[,c("SeqID", "PCoA1", "PCoA2")]
-
-df_gens <- merge(df_gens, beta_id, by = "SeqID")
-
-cor.test(df_gens$temp, df_gens$PCoA1) #no correlation
-cor.test(df_gens$temp, df_gens$PCoA2) #no correlation
-
-```
-###linear model
-```{r}
-beta_2wk <- '
-
-temp ~ PCoA1 + PCoA2 + tc_sex + SES + months_bf_T18 + PH_cesarean_T2
-
-'
-fitbeta2 <- sem(beta_2wk, fixed.x=F,data = df_gens)
-summary(fitbeta2, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
-
-```
-
-###18 months
-```{r}
-sample_names <- colnames(genus_18mo)
-
-# Calculate dissimilarity matrix (replace this with your own distance calculation method)
-# Here, we use Bray-Curtis dissimilarity as an example
-dist_matrix <- vegdist(genus_18mo, method = "bray")
-
-# Perform PCoA
-pcoa_result <- cmdscale(dist_matrix)
-
-colnames(pcoa_result) <- c("PCoA118", "PCoA218")
-
-genus_beta <- cbind(genus_18mo, pcoa_result)
-
-beta_id <- genus_beta[,c("SeqID", "PCoA118", "PCoA218")]
-
-df_gens <- merge(df_gens, beta_id, by = "SeqID")
-
-cor.test(df_gens$temp, df_gens$PCoA118) #no correlation
-cor.test(df_gens$temp, df_gens$PCoA218) #no correlation
-
-```
-
-####linear model
-```{r}
-beta_18mo <- '
-
-temp ~ PCoA118 + PCoA218 + tc_sex + SES + months_bf_T18 + PH_cesarean_T2
-
-'
-fitbeta18 <- sem(beta_18mo, fixed.x=F,data = df_gens)
-summary(fitbeta18, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
-
-```
-
-####linear model both
-```{r}
-beta_both <- '
-
-temp ~ PCoA1 + PCoA2 + PCoA118 + PCoA218 + tc_sex + SES + months_bf_T18 + PH_cesarean_T2
-
-'
-fitbetaboth <- sem(beta_both, fixed.x=F,data = df_gens)
-summary(fitbetaboth, fit.measures = TRUE, standardized = TRUE, rsquare=TRUE, estimates = TRUE, ci = TRUE)
-
-```
